@@ -1,0 +1,16 @@
+# AstraMentor 双Agent教学系统依赖
+
+# Google Generative AI SDK
+google-generativeai>=0.8.0
+
+# 环境变量管理
+python-dotenv>=1.0.0
+
+# 数据验证
+pydantic>=2.0.0
+
+# JSON处理
+orjson>=3.9.0
+
+# 测试框架
+pytest>=7.0.0

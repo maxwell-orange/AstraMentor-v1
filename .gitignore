@@ -1,0 +1,120 @@
+# =====================================================
+# Python
+# =====================================================
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# =====================================================
+# Virtual Environments
+# =====================================================
+.venv/
+venv/
+ENV/
+env/
+.env/
+
+# =====================================================
+# IDE / Editor
+# =====================================================
+
+# VSCode
+.vscode/
+
+# PyCharm
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+
+# =====================================================
+# Project Specific
+# =====================================================
+
+# 学习状态文件（包含用户学习进度，不上传）
+learner_state.json
+
+# 日志文件
+*.log
+logs/
+
+# 临时文件
+*.tmp
+*.temp
+.DS_Store
+Thumbs.db
+
+# =====================================================
+# Secrets / Credentials
+# =====================================================
+
+# 环境变量文件
+.env
+.env.local
+.env.*.local
+
+# API密钥（如果有单独的配置文件）
+secrets.py
+credentials.json
+*.pem
+*.key
