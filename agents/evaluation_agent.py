@@ -96,11 +96,16 @@ class EvaluationAgent:
         else:
             difficulty = self.scoring_engine.determine_difficulty(question)
         
-        # 3. 计算新的掌握度
+        # 3. 获取上次练习时间（用于时间遗忘计算）
+        last_practice_time = knowledge_point.get_last_practice_time()
+        
+        # 4. 计算新的掌握度（使用增强版算法）
         scoring_result = self.scoring_engine.calculate_new_mastery(
             old_mastery=knowledge_point.actual_mastery,
             task_score=ai_result["score"],
-            difficulty=difficulty
+            difficulty=difficulty,
+            last_practice_time=last_practice_time,
+            use_enhanced=True
         )
         
         # 4. 检查是否达到目标

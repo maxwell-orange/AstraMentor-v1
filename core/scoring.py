@@ -1,10 +1,18 @@
 """
 评分算法模块
 
-实现基于带权重指数移动平均（Weighted EMA）的动态评分算法
+实现增强版动态评分算法，基于带权重指数移动平均（Weighted EMA）
+并融合BKT和IRT的优秀特性
+
+增强特性：
+1. 自适应学习率：根据教学阶段动态调整
+2. 时间遗忘因子：长时间不练习会导致掌握度衰减
+3. 失误容错：高掌握度答错时减少惩罚
+4. 猜对检测：低掌握度答对时减少奖励
 """
 
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from enum import Enum
 from typing import Optional
 
@@ -50,6 +58,15 @@ class ScoringResult:
     # 学习率
     learning_rate: float
     
+    # 时间衰减因子（增强版新增）
+    time_decay: float = 1.0
+    
+    # 容错因子（增强版新增）
+    tolerance_factor: float = 1.0
+    
+    # 算法类型标识
+    algorithm: str = "enhanced_ema"
+    
     def get_improvement(self) -> float:
         """获取掌握度提升量"""
         return self.new_mastery - self.old_mastery
@@ -57,17 +74,19 @@ class ScoringResult:
 
 class ScoringEngine:
     """
-    评分引擎
+    增强版评分引擎
     
-    实现核心评分公式：
-    A_new = A_old + α × (S_task × W_cap - A_old)
+    核心公式：
+    A_new = A_old + α(stage) × (S_task × W_cap - A_old) × β(time) × γ(tolerance)
     
     其中：
     - A_new: 更新后的掌握度
     - A_old: 更新前的掌握度
-    - α: 学习率（0.2-0.4）
+    - α(stage): 自适应学习率，根据阶段调整
     - S_task: AI对用户本次回答/代码的评分（0.0-1.0）
     - W_cap: 任务难度上限
+    - β(time): 时间遗忘因子
+    - γ(tolerance): 失误/猜对容错因子
     """
     
     def __init__(self, learning_rate: Optional[float] = None):
@@ -75,11 +94,30 @@ class ScoringEngine:
         初始化评分引擎
         
         Args:
-            learning_rate: 学习率，为None时使用配置默认值
+            learning_rate: 基础学习率，为None时使用配置默认值
         """
         config = get_config()
-        self.learning_rate = learning_rate or config.learning.learning_rate
+        self.base_learning_rate = learning_rate or config.learning.learning_rate
         self.config = config.learning
+        
+        # 增强版参数配置
+        self.stage_learning_rates = {
+            0: 0.40,  # 启蒙阶段：学习快，容易进步
+            1: 0.35,  # 基础阶段：稍慢一些
+            2: 0.25,  # 进阶阶段：需要更多练习
+            3: 0.15,  # 专家阶段：精益求精，变化小
+        }
+        
+        # 时间遗忘配置
+        self.forgetting_start_days = 7   # 7天后开始遗忘
+        self.forgetting_rate = 0.02      # 每天遗忘2%
+        self.forgetting_floor = 0.1      # 遗忘下限，不会低于10%
+        
+        # 容错配置
+        self.slip_threshold = 0.7        # 高于此掌握度视为"会"
+        self.guess_threshold = 0.3       # 低于此掌握度视为"不会"
+        self.slip_protection = 0.5       # 失误保护：惩罚减半
+        self.guess_dampening = 0.6       # 猜对抑制：奖励打折
     
     def get_difficulty_cap(self, difficulty: TaskDifficulty) -> float:
         """
@@ -98,21 +136,115 @@ class ScoringEngine:
         }
         return caps.get(difficulty, self.config.difficulty_basic_code)
     
+    def get_adaptive_learning_rate(self, mastery: float) -> float:
+        """
+        获取自适应学习率
+        
+        根据当前掌握度所处阶段返回对应的学习率
+        初期学习快，后期精进慢
+        
+        Args:
+            mastery: 当前掌握度
+            
+        Returns:
+            对应阶段的学习率
+        """
+        if mastery < 0.2:
+            stage = 0
+        elif mastery < 0.5:
+            stage = 1
+        elif mastery < 0.8:
+            stage = 2
+        else:
+            stage = 3
+        
+        return self.stage_learning_rates.get(stage, self.base_learning_rate)
+    
+    def calculate_time_decay(
+        self,
+        last_practice_time: Optional[datetime] = None
+    ) -> float:
+        """
+        计算时间遗忘因子
+        
+        长时间不练习会导致掌握度衰减
+        公式：β = max(floor, 1 - rate × max(0, days - start_days))
+        
+        Args:
+            last_practice_time: 上次练习时间
+            
+        Returns:
+            时间衰减因子（0.0-1.0），1.0表示无衰减
+        """
+        if last_practice_time is None:
+            return 1.0
+        
+        days_since_practice = (datetime.now() - last_practice_time).days
+        
+        if days_since_practice <= self.forgetting_start_days:
+            return 1.0
+        
+        # 计算衰减
+        extra_days = days_since_practice - self.forgetting_start_days
+        decay = 1.0 - self.forgetting_rate * extra_days
+        
+        # 不低于遗忘下限
+        return max(self.forgetting_floor, decay)
+    
+    def calculate_tolerance_factor(
+        self,
+        old_mastery: float,
+        task_score: float
+    ) -> float:
+        """
+        计算容错因子
+        
+        融合BKT的失误(slip)和猜对(guess)概念：
+        - 高掌握度答错：可能是失误，减少惩罚
+        - 低掌握度答对：可能是猜对，减少奖励
+        
+        Args:
+            old_mastery: 当前掌握度
+            task_score: 本次评分
+            
+        Returns:
+            容错因子
+        """
+        # 计算变化方向
+        is_improvement = task_score > old_mastery
+        
+        # 高掌握度答错（失误保护）
+        if old_mastery >= self.slip_threshold and task_score < 0.5:
+            # 答错了，但可能是失误，减少惩罚
+            return self.slip_protection
+        
+        # 低掌握度答对（猜对抑制）
+        if old_mastery <= self.guess_threshold and task_score > 0.8:
+            # 答对了，但可能是猜的，减少奖励
+            return self.guess_dampening
+        
+        return 1.0
+    
     def calculate_new_mastery(
         self,
         old_mastery: float,
         task_score: float,
-        difficulty: TaskDifficulty
+        difficulty: TaskDifficulty,
+        last_practice_time: Optional[datetime] = None,
+        use_enhanced: bool = True
     ) -> ScoringResult:
         """
-        计算更新后的掌握度
+        计算更新后的掌握度（增强版）
         
-        核心公式：A_new = A_old + α × (S_task × W_cap - A_old)
+        增强公式：
+        A_new = A_old × β + α × (S × W_cap - A_old × β) × γ
         
         Args:
             old_mastery: 当前掌握度（A_old）
             task_score: 任务评分（S_task，0.0-1.0）
             difficulty: 任务难度
+            last_practice_time: 上次练习时间（用于遗忘计算）
+            use_enhanced: 是否使用增强算法
             
         Returns:
             ScoringResult包含完整的评分结果
@@ -124,11 +256,46 @@ class ScoringEngine:
         # 获取难度上限
         w_cap = self.get_difficulty_cap(difficulty)
         
-        # 计算目标掌握度（带难度上限）
-        target = task_score * w_cap
-        
-        # 应用EMA公式：A_new = A_old + α × (target - A_old)
-        new_mastery = old_mastery + self.learning_rate * (target - old_mastery)
+        if use_enhanced:
+            # 增强版算法
+            
+            # 1. 计算时间衰减后的掌握度
+            time_decay = self.calculate_time_decay(last_practice_time)
+            decayed_mastery = old_mastery * time_decay
+            
+            # 2. 获取自适应学习率
+            learning_rate = self.get_adaptive_learning_rate(decayed_mastery)
+            
+            # 3. 计算容错因子
+            tolerance_factor = self.calculate_tolerance_factor(
+                old_mastery, task_score
+            )
+            
+            # 4. 计算目标掌握度
+            target = task_score * w_cap
+            
+            # 5. 计算基础变化量
+            delta = target - decayed_mastery
+            
+            # 6. 应用增强公式
+            # 如果是下降（delta < 0），应用容错保护
+            # 如果是上升（delta > 0），检查是否需要抑制猜对
+            if delta < 0:
+                # 下降时应用失误保护
+                adjusted_delta = delta * tolerance_factor
+            else:
+                # 上升时检查猜对抑制
+                adjusted_delta = delta * tolerance_factor
+            
+            new_mastery = decayed_mastery + learning_rate * adjusted_delta
+            
+        else:
+            # 原版算法（向后兼容）
+            learning_rate = self.base_learning_rate
+            time_decay = 1.0
+            tolerance_factor = 1.0
+            target = task_score * w_cap
+            new_mastery = old_mastery + learning_rate * (target - old_mastery)
         
         # 确保结果在有效范围内
         new_mastery = max(0.0, min(1.0, new_mastery))
@@ -139,8 +306,31 @@ class ScoringEngine:
             new_mastery=round(new_mastery, 4),
             difficulty=difficulty,
             difficulty_cap=w_cap,
-            learning_rate=self.learning_rate
+            learning_rate=learning_rate,
+            time_decay=time_decay,
+            tolerance_factor=tolerance_factor,
+            algorithm="enhanced_ema" if use_enhanced else "basic_ema"
         )
+    
+    def apply_forgetting(
+        self,
+        current_mastery: float,
+        last_practice_time: datetime
+    ) -> float:
+        """
+        单独应用遗忘衰减（不涉及答题）
+        
+        用于在显示学习状态时实时计算衰减后的掌握度
+        
+        Args:
+            current_mastery: 记录的掌握度
+            last_practice_time: 上次练习时间
+            
+        Returns:
+            衰减后的掌握度
+        """
+        decay = self.calculate_time_decay(last_practice_time)
+        return round(current_mastery * decay, 4)
     
     def determine_difficulty(self, question_type: str) -> TaskDifficulty:
         """
@@ -167,14 +357,6 @@ class ScoringEngine:
             "填空", "补全", "修改", "调试", "修复",
             "fill", "complete", "modify", "debug", "fix",
             "代码", "code", "函数", "function"
-        ]
-        
-        # 概念问答关键词（默认）
-        concept_keywords = [
-            "选择", "判断", "解释", "什么是", "为什么",
-            "概念", "定义", "区别", "比较",
-            "choose", "select", "explain", "what", "why",
-            "concept", "definition", "difference", "compare"
         ]
         
         # 按优先级匹配
@@ -208,3 +390,38 @@ class ScoringEngine:
             return "优秀"
         else:
             return "完美！"
+    
+    def get_algorithm_explanation(self, result: ScoringResult) -> str:
+        """
+        生成算法解释（用于调试和透明度）
+        
+        Args:
+            result: 评分结果
+            
+        Returns:
+            人类可读的算法解释
+        """
+        lines = [
+            f"📊 评分算法详情 ({result.algorithm})",
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+            f"本次得分: {result.task_score:.2f}",
+            f"难度上限: {result.difficulty_cap:.1f} ({result.difficulty.value})",
+            f"学习率α: {result.learning_rate:.2f}",
+        ]
+        
+        if result.time_decay < 1.0:
+            lines.append(f"时间衰减β: {result.time_decay:.2f} (长时间未练习)")
+        
+        if result.tolerance_factor != 1.0:
+            if result.tolerance_factor == 0.5:
+                lines.append(f"容错因子γ: {result.tolerance_factor:.2f} (失误保护)")
+            else:
+                lines.append(f"容错因子γ: {result.tolerance_factor:.2f} (猜对抑制)")
+        
+        improvement = result.get_improvement()
+        if improvement >= 0:
+            lines.append(f"掌握度变化: {result.old_mastery:.2%} → {result.new_mastery:.2%} (+{improvement:.2%})")
+        else:
+            lines.append(f"掌握度变化: {result.old_mastery:.2%} → {result.new_mastery:.2%} ({improvement:.2%})")
+        
+        return "\n".join(lines)

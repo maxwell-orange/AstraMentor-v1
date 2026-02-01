@@ -87,6 +87,24 @@ class KnowledgePoint:
         """转换为字典"""
         return asdict(self)
     
+    def get_last_practice_time(self) -> Optional[datetime]:
+        """
+        获取上次练习时间
+        
+        用于计算时间遗忘因子
+        
+        Returns:
+            上次练习的datetime对象，无练习记录返回None
+        """
+        if not self.history:
+            return None
+        
+        last_entry = self.history[-1]
+        try:
+            return datetime.fromisoformat(last_entry["timestamp"])
+        except (KeyError, ValueError):
+            return None
+    
     @classmethod
     def from_dict(cls, data: dict) -> "KnowledgePoint":
         """从字典创建实例"""
