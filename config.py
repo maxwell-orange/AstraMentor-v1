@@ -11,6 +11,7 @@ from pathlib import Path
 # 加载.env文件中的环境变量
 try:
     from dotenv import load_dotenv
+
     # 查找项目根目录下的.env文件
     env_path = Path(__file__).parent / ".env"
     if env_path.exists():
@@ -22,30 +23,32 @@ except ImportError:
 @dataclass
 class APIConfig:
     """API配置类"""
-    
+
     # Antigravity 代理地址
-    api_endpoint: str = "http://127.0.0.1:8045"
-    
-    # API密钥（必须从环境变量读取）
-    api_key: str = field(
-        default_factory=lambda: os.getenv("ASTRA_API_KEY", "")
+    api_endpoint: str = field(
+        default_factory=lambda: os.getenv("ASTRA_API_ENDPOINT", "http://127.0.0.1:8045")
     )
-    
+
+    # API密钥（必须从环境变量读取）
+    api_key: str = field(default_factory=lambda: os.getenv("ASTRA_API_KEY", ""))
+
     # 传输方式
     transport: str = "rest"
-    
+
     # 默认模型
-    model_name: str = "gemini-3-flash"
+    model_name: str = field(
+        default_factory=lambda: os.getenv("ASTRA_MODEL_NAME", "gemini-3-flash-preview")
+    )
 
 
 @dataclass
 class LearningConfig:
     """学习参数配置类"""
-    
+
     # 学习率（α），决定练习对总成绩的影响程度
     # 通常取值 0.2 - 0.4
     learning_rate: float = 0.3
-    
+
     # 任务难度上限配置
     # 选择题/概念问答
     difficulty_concept: float = 0.4
@@ -53,7 +56,7 @@ class LearningConfig:
     difficulty_basic_code: float = 0.7
     # 复杂项目/手写算法
     difficulty_advanced: float = 1.0
-    
+
     # 默认期望掌握度
     default_target_mastery: float = 0.8
 
@@ -61,7 +64,7 @@ class LearningConfig:
 @dataclass
 class Config:
     """全局配置类"""
-    
+
     api: APIConfig = field(default_factory=APIConfig)
     learning: LearningConfig = field(default_factory=LearningConfig)
 
