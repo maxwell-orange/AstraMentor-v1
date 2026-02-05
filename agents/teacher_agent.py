@@ -7,6 +7,8 @@ Teacher Agent 模块
 import logging
 from typing import Optional
 
+from pydantic import BaseModel
+
 from core.learner_state import KnowledgePoint
 from core.prompts import (
     get_teaching_prompt,
@@ -64,12 +66,19 @@ class TeacherAgent:
 你的任务是为学习者制定个性化的教学计划。
 请确保计划循序渐进，适合学习者当前的水平。
 """
+        class planSchema(BaseModel):
+            todo: list[str]
         
-        plan = self.api_client.generate(
+        plan = self.api_client.generate_json(
             prompt=prompt,
             system_instruction=system_instruction,
-            temperature=0.7
+            temperature=0.7,
+            output_schema=planSchema
         )
+        # print(f"生成的教学计划: {plan}")
+
+
+        
         
         logger.info(f"已生成知识点 '{knowledge_point.name}' 的教学计划")
         return plan
