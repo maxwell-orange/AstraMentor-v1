@@ -1,7 +1,8 @@
 # AstraMentor 双Agent教学系统依赖
 
 # Google Generative AI SDK
-google-generativeai>=0.8.0
+# the lastest sdk
+google-genai>=0.5.0
 
 # 环境变量管理
 python-dotenv>=1.0.0
