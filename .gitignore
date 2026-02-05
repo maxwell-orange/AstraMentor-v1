@@ -10,6 +10,10 @@ __pycache__/
 # C extensions
 *.so
 
+
+# test data that should be ignored
+test_data/
+
 # Distribution / packaging
 .Python
 build/

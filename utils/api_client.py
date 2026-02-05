@@ -49,7 +49,8 @@ class APIClient:
         self,
         prompt: str,
         system_instruction: Optional[str] = None,
-        temperature: float = 0.7
+        temperature: float = 0.7,
+        max_tokens: Optional[int] = None
     ) -> str:
         """
         生成内容
@@ -68,17 +69,27 @@ class APIClient:
                 model = genai.GenerativeModel(
                     self.model_name,
                     system_instruction=system_instruction
+                    
                 )
             else:
                 model = self.model
             
             # 生成内容
-            response = model.generate_content(
-                prompt,
-                generation_config=genai.GenerationConfig(
-                    temperature=temperature
+            if max_tokens is None:
+                response = model.generate_content(
+                    prompt,
+                    generation_config=genai.GenerationConfig(
+                        temperature=temperature
+                    )
                 )
-            )
+            else:
+                response = model.generate_content(
+                    prompt,
+                    generation_config=genai.GenerationConfig(
+                        temperature=temperature,
+                        max_output_tokens=max_tokens
+                    )
+                )
             
             return response.text
             

@@ -112,7 +112,9 @@ class TeacherAgent:
         teaching_content = self.api_client.generate(
             prompt=user_prompt,
             system_instruction=system_instruction,
-            temperature=0.7
+            temperature=0.7,
+            max_tokens=2500
+
         )
         
         logger.info(
@@ -206,3 +208,54 @@ class TeacherAgent:
         )
         
         return explanation
+
+    def discuss(
+        self,
+        knowledge_point: KnowledgePoint,
+        teaching_content: str,
+        question: str,
+        discussion_history: list = None
+    ) -> str:
+        """
+        讨论环节
+        
+        在用户回答问题后，允许用户提出疑问并进行讨论
+        
+        Args:
+            knowledge_point: 知识点对象
+            question: 原问题
+            
+        Returns:
+            讨论内容
+        """
+        stage = knowledge_point.get_teaching_stage()
+        
+        system_instruction = get_teaching_prompt(
+            stage=stage,
+            topic=knowledge_point.name,
+            current_score=knowledge_point.actual_mastery
+        )
+        
+        prompt = """基于以下教学内容，回答用户的疑问：
+            【教学内容】
+            """ + teaching_content + "\n\n" 
+
+        if discussion_history:
+            history_text = "\n".join(
+                [f"用户：{q}\nAstraMentor：{a}" for q, a in discussion_history[-2:]]
+            )
+            prompt += f"\n\n【讨论历史】\n{history_text}"
+            
+        prompt += f"""这是用户当前的【问题】{question} 
+        请允许用户提出疑问并进行讨论，帮助用户更好地理解该知识点。
+        保持耐心和鼓励的语气，确保用户感到被支持和理解。
+        """ 
+
+        answer = self.api_client.generate(
+            prompt=prompt,
+            system_instruction=system_instruction,
+            temperature=0.7,
+            max_tokens=1500
+        )
+        
+        return answer

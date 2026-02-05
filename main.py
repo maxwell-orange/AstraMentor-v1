@@ -159,7 +159,9 @@ class AstraMentor:
         if plan is None:
             print("\n👋 学习已取消，下次再见！")
             return
-
+        # 这个plan 没有被用到，应该可以用来更细致的做教学的步骤
+        # good to make this a list of todos for the teaching loop
+        
         # 阶段2：开始教学循环
         self._teaching_loop(kp)
 
@@ -212,6 +214,7 @@ class AstraMentor:
         """
         iteration = 0
         max_iterations = 20  # 防止无限循环
+        
 
         while not knowledge_point.is_mastered() and iteration < max_iterations:
             iteration += 1
@@ -223,11 +226,47 @@ class AstraMentor:
             print("\n🎓 正在讲解...")
             teaching_content = self.teacher.teach(knowledge_point)
             print("\n" + teaching_content)
+            
+            
+            # 1.5 这里应该有一个讨论环节：跟据内容允许答疑，直到用户满意为止
+            current_discussion_round = 0
+            max_discussion_rounds = 10
+            
+            discussion_history = []
 
-            input("\n按回车继续进行知识检验...")
-
-            # 2. 提问
-            print("\n❓ 验证问题:")
+            while current_discussion_round < max_discussion_rounds:
+                print("\n💬 讨论环节:")
+                # He should be able to use the knowledge as context, answer questions, etc.
+                print("你可以就刚才的内容提出问题或讨论！")
+                question = input("请输入你的问题（直接回车跳过讨论环节）: ").strip()
+                if question:
+                    discussion_response = self.teacher.discuss(
+                        knowledge_point=knowledge_point, teaching_content= teaching_content,question=question, discussion_history = discussion_history
+                    )
+                    print("\n" + discussion_response)
+                    discussion_history.append({
+                        "question": question,
+                        "response": discussion_response
+                    })
+                    
+                    
+                else:
+                    print("跳过讨论环节。")
+                    break
+                
+                
+                if current_discussion_round % 3 == 2:
+                    user_input = input(f"\n你有信心进入测试，来检测你对当前知识点的掌握程度吗？[(Yes)进入测试/(No)继续学习]: ").strip()
+                    if user_input == "Yes" or user_input == "进入测试":
+                        break
+                    elif user_input == "No" or user_input == "继续学习":
+                        print("\n🎓 继续讲解...")
+                        current_discussion_round += 1
+                    else:
+                        print("无效输入，请输入 '继续' 或 '退出'")
+                current_discussion_round += 1
+            # 2. 提问/Quiz, check that the user is mastering the content
+            print("\n❓ 测试问题，用来检验你的掌握情况:")
             question = self.teacher.generate_question(knowledge_point)
             print(question)
 
