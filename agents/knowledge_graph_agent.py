@@ -1,5 +1,5 @@
 """
-KnowledgeGraph Agent - 知识图谱生成器
+KnowledgeGraph Agent - 知识星图生成器
 生成topic下的知识节点及依赖关系
 """
 
@@ -7,42 +7,46 @@ import logging
 from typing import Dict, Any, List
 
 from utils.api_client import APIClient
+from models.knowledge_graph import KnowledgeGraph
 
 logger = logging.getLogger(__name__)
 
 
 class KnowledgeGraphAgent:
     """
-    知识图谱生成Agent
-    只负责生成图谱结构，不负责教学计划
+    知识星图生成Agent
     """
 
-    SYSTEM_INSTRUCTION = """你是知识图谱架构师。
+    SYSTEM_INSTRUCTION = """你是一位专业的知识星图架构师。
 
-分析学习主题，拆分成5-15个可独立学习的知识节点。
+你的任务是：根据用户的学习主题、目标和当前水平，生成一个结构化的知识星图。
 
-输出JSON格式：
-{
-  "nodes": [
-    {
-      "id": "n1",
-      "name": "知识点名称",
-      "description": "1-2句话描述学习内容",
-      "level": 0,              // 0=基础, 1=进阶, 2=高级, 3=专家
-      "difficulty": "初级",     // 初级/中级/高级/专家
-      "prerequisites": []       // 前置节点ID数组
-    }
-  ],
-  "edges": [
-    {"source": "n1", "target": "n2"}  // n1是n2的前置知识
-  ]
-}
+输出要求：
+1. 使用 JSON Schema 定义的 KnowledgeGraph 格式
+2. graph.topic 必须填写用户的学习主题
+3. graph.name 设置为 "{主题} 学习路线图" 的格式
+4. nodes 包含 5-15 个知识节点，每个节点需要：
+   - id: 唯一标识符（如 "node_1", "node_2"）
+   - name: 知识点名称（简洁明确）
+   - attributes.weight_A: 根据用户当前水平设置（0.0-1.0）
+     * 如果用户可能已掌握该知识点，设置为 0.6-0.9
+     * 如果用户完全不懂，设置为 0.0-0.2
+   - attributes.weight_B: 根据用户目标设置（0.0-1.0）
+     * 如果该知识点对达成目标很重要，设置为 0.8-0.95
+     * 如果该知识点只需了解即可，设置为 0.5-0.7
+   - attributes.description: 1-2句话描述该知识点的核心内容和学习要点
+   - attributes.user_note: 留空（用于用户后续填写个性化备注）
+5. links 定义节点间的依赖关系：
+   - source: 前置知识节点ID
+   - target: 后续知识节点ID  
+   - reason: 清晰说明为什么存在这个依赖
+   - weight: 依赖强度（0.0-1.0）
 
-要求：
-1. 节点粒度适中：每个节点是独立的教学单元（可单独讲解+出题）
-2. 依赖清晰：确保是DAG（有向无环图）
-3. 层级递进：level从0开始，逐层增加
-4. 难度合理：初级→中级→高级→专家
+设计原则：
+- 节点粒度适中：每个节点是独立的教学单元
+- 依赖清晰：确保是DAG（有向无环图）
+- 个性化：根据用户的当前水平和目标，合理设置每个节点的 weight_A 和 weight_B
+- 循序渐进：确保学习路径符合认知规律（先易后难）
 """
 
     def __init__(self, api_client: APIClient):
@@ -50,75 +54,55 @@ class KnowledgeGraphAgent:
         logger.info("KnowledgeGraphAgent 初始化完成")
 
     def generate_knowledge_graph(
-        self, topic: str, user_note: str = ""
+        self,
+        topic: str,
+        learning_goal: str = "",
+        current_level: str = "零基础",
+        target_level: str = "掌握核心概念",
     ) -> Dict[str, Any]:
         """
-        生成知识图谱
+        生成知识星图
 
         Args:
             topic: 学习主题（如"Python异步编程"）
-            user_note: 用户备注（可选）
+            learning_goal: 学习目的（如"用于开发高性能Web服务"）
+            current_level: 当前水平描述（如"零基础"、"了解基础语法"、"有一定项目经验"）
+            target_level: 目标水平描述（如"掌握核心概念"、"能独立开发项目"、"达到专家水平"）
 
         Returns:
-            图谱JSON数据
-            {
-                "nodes": [...],
-                "edges": [...]
-            }
+            图谱数据字典（从 Pydantic 模型转换）
         """
-        prompt = f"""请为以下主题生成知识图谱：
+        # 构建用户输入上下文（只包含用户信息，不包含规则）
+        prompt = f"""学习主题：{topic}
 
-主题：{topic}
-"""
-        if user_note:
-            prompt += f"用户需求：{user_note}\n"
+学习目的：{learning_goal if learning_goal else "系统学习该主题"}
 
-        prompt += "\n请严格按照JSON格式输出。"
+我的当前水平：{current_level}
 
-        logger.info(f"正在为主题 '{topic}' 生成知识图谱...")
+我的目标水平：{target_level}
+
+请为我生成个性化的知识星图。"""
+
+        logger.info(f"正在为主题 '{topic}' 生成知识星图...")
 
         try:
-            graph_data = self.api_client.generate_json(
+            # 使用结构化输出
+            graph_model = self.api_client.generate_json(
                 prompt=prompt,
                 system_instruction=self.SYSTEM_INSTRUCTION,
                 temperature=0.7,
+                output_schema=KnowledgeGraph,
             )
 
-            # 验证数据
-            if not self._validate_graph(graph_data):
-                raise ValueError("图谱数据格式不正确")
+            # 转换为字典（保持向后兼容）
+            graph_data = graph_model.model_dump()
 
-            logger.info(f"✅ 知识图谱生成成功，包含 {len(graph_data['nodes'])} 个节点")
+            logger.info(f"✅ 知识星图生成成功，包含 {len(graph_data['nodes'])} 个节点")
             return graph_data
 
         except Exception as e:
-            logger.error(f"❌ 知识图谱生成失败: {e}")
+            logger.error(f"❌ 知识星图生成失败: {e}")
             raise
-
-    def _validate_graph(self, data: Dict[str, Any]) -> bool:
-        """验证图谱数据格式"""
-        if not isinstance(data, dict):
-            return False
-
-        if "nodes" not in data or "edges" not in data:
-            return False
-
-        # 验证节点
-        node_ids = set()
-        for node in data["nodes"]:
-            required_fields = ["id", "name", "level", "difficulty"]
-            if not all(field in node for field in required_fields):
-                return False
-            node_ids.add(node["id"])
-
-        # 验证边
-        for edge in data["edges"]:
-            if "source" not in edge or "target" not in edge:
-                return False
-            if edge["source"] not in node_ids or edge["target"] not in node_ids:
-                return False
-
-        return True
 
     def get_learning_path(self, graph_data: Dict[str, Any]) -> List[str]:
         """
@@ -130,15 +114,15 @@ class KnowledgeGraphAgent:
         from collections import defaultdict, deque
 
         nodes = graph_data["nodes"]
-        edges = graph_data["edges"]
+        links = graph_data.get("links", [])  # 使用新的 links 字段
 
         # 构建图
         graph = defaultdict(list)
         in_degree = {node["id"]: 0 for node in nodes}
 
-        for edge in edges:
-            graph[edge["source"]].append(edge["target"])
-            in_degree[edge["target"]] += 1
+        for link in links:
+            graph[link["source"]].append(link["target"])
+            in_degree[link["target"]] += 1
 
         # Kahn算法
         queue = deque([nid for nid, deg in in_degree.items() if deg == 0])
@@ -163,22 +147,13 @@ class KnowledgeGraphAgent:
             可读的摘要文字
         """
         nodes = graph_data["nodes"]
-        edges = graph_data["edges"]
+        links = graph_data.get("links", [])
 
-        summary = f"📊 知识图谱包含 {len(nodes)} 个知识点，{len(edges)} 个依赖关系\n\n"
+        summary = f"📊 知识星图包含 {len(nodes)} 个知识点，{len(links)} 个依赖关系\n\n"
 
-        # 按层级分组
-        levels = {}
-        for node in nodes:
-            level = node.get("level", 0)
-            if level not in levels:
-                levels[level] = []
-            levels[level].append(node["name"])
-
-        summary += "🎓 学习路径：\n"
-        level_names = ["🔰 基础层", "📚 进阶层", "🚀 高级层", "🌟 专家层"]
-        for level in sorted(levels.keys()):
-            name = level_names[min(level, 3)]
-            summary += f"  {name}: {' → '.join(levels[level])}\n"
+        # 列出所有节点
+        summary += "📚 知识节点：\n"
+        for i, node in enumerate(nodes, 1):
+            summary += f"  {i}. {node['name']}\n"
 
         return summary

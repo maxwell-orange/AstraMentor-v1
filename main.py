@@ -12,6 +12,7 @@ from agents.teacher_agent import TeacherAgent
 from agents.evaluation_agent import EvaluationAgent
 from agents.knowledge_graph_agent import KnowledgeGraphAgent
 from core.learner_state import LearnerState, KnowledgePoint
+from core.constants import LearningLevel
 from utils.api_client import APIClient
 import json
 
@@ -50,33 +51,45 @@ class AstraMentor:
 
         logger.info("AstraMentor 初始化完成")
 
-    def generate_knowledge_graph(self, topic: str, user_note: str = "") -> dict | None:
+    def generate_knowledge_graph(
+        self,
+        topic: str,
+        learning_goal: str = "",
+        current_level: str = "零基础",
+        target_level: str = "掌握核心概念",
+    ) -> dict | None:
         """
-        生成知识图谱
+        生成知识星图
 
         Args:
             topic: 学习主题
-            user_note: 用户备注
+            learning_goal: 学习目的
+            current_level: 当前水平
+            target_level: 目标水平
 
         Returns:
             图谱数据，失败或取消返回None
         """
         print("\n" + "=" * 60)
-        print(f"🎓 AstraMentor - 知识图谱生成器")
+        print(f"🎓 AstraMentor - 知识星图生成器")
         print("=" * 60)
         print(f"\n📚 主题: {topic}")
-        if user_note:
-            print(f"📝 备注: {user_note}")
+        print(f"🎯 目的: {learning_goal}")
+        print(f"📊 当前水平: {current_level}")
+        print(f"🚀 目标水平: {target_level}")
         print()
 
-        # 生成知识图谱
-        print("🌟 正在生成知识图谱...")
+        # 生成知识星图
+        print("🌟 正在生成知识星图...")
         try:
             graph_data = self.knowledge_graph.generate_knowledge_graph(
-                topic=topic, user_note=user_note
+                topic=topic,
+                learning_goal=learning_goal,
+                current_level=current_level,
+                target_level=target_level,
             )
         except Exception as e:
-            print(f"❌ 知识图谱生成失败: {e}")
+            print(f"❌ 知识星图生成失败: {e}")
             print("请检查API配置或稍后重试")
             return None
 
@@ -88,7 +101,7 @@ class AstraMentor:
         graph_file = test_data_dir / graph_filename
         with open(graph_file, "w", encoding="utf-8") as f:
             json.dump(graph_data, f, ensure_ascii=False, indent=2)
-        print(f"✅ 知识图谱已保存到: {graph_file}")
+        print(f"✅ 知识星图已保存到: {graph_file}")
 
         # 显示图谱摘要
         summary = self.knowledge_graph.format_graph_summary(graph_data)
@@ -103,7 +116,9 @@ class AstraMentor:
             return None
         elif choice == "R":
             # 递归重新生成
-            return self.generate_knowledge_graph(topic, user_note)
+            return self.generate_knowledge_graph(
+                topic, learning_goal, current_level, target_level
+            )
 
         return graph_data
 
@@ -129,8 +144,7 @@ class AstraMentor:
         print(f"🎓 AstraMentor - AI教学助手")
         print("=" * 60)
         print(f"\n📖 开始学习: {node_name}")
-        if node_description:
-            print(f"📝 描述: {node_description}")
+        print(f"📝 描述: {node_description}")
         if user_note:
             print(f"💬 你的需求: {user_note}")
         print(f"📊 当前掌握度: {current_mastery:.1%}")
@@ -161,7 +175,7 @@ class AstraMentor:
             return
         # 这个plan 没有被用到，应该可以用来更细致的做教学的步骤
         # good to make this a list of todos for the teaching loop
-        
+
         # 阶段2：开始教学循环
         self._teaching_loop(kp)
 
@@ -214,7 +228,6 @@ class AstraMentor:
         """
         iteration = 0
         max_iterations = 20  # 防止无限循环
-        
 
         while not knowledge_point.is_mastered() and iteration < max_iterations:
             iteration += 1
@@ -226,12 +239,11 @@ class AstraMentor:
             print("\n🎓 正在讲解...")
             teaching_content = self.teacher.teach(knowledge_point)
             print("\n" + teaching_content)
-            
-            
+
             # 1.5 这里应该有一个讨论环节：跟据内容允许答疑，直到用户满意为止
             current_discussion_round = 0
             max_discussion_rounds = 10
-            
+
             discussion_history = []
 
             while current_discussion_round < max_discussion_rounds:
@@ -241,22 +253,24 @@ class AstraMentor:
                 question = input("请输入你的问题（直接回车跳过讨论环节）: ").strip()
                 if question:
                     discussion_response = self.teacher.discuss(
-                        knowledge_point=knowledge_point, teaching_content= teaching_content,question=question, discussion_history = discussion_history
+                        knowledge_point=knowledge_point,
+                        teaching_content=teaching_content,
+                        question=question,
+                        discussion_history=discussion_history,
                     )
                     print("\n" + discussion_response)
-                    discussion_history.append({
-                        "question": question,
-                        "response": discussion_response
-                    })
-                    
-                    
+                    discussion_history.append(
+                        {"question": question, "response": discussion_response}
+                    )
+
                 else:
                     print("跳过讨论环节。")
                     break
-                
-                
+
                 if current_discussion_round % 3 == 2:
-                    user_input = input(f"\n你有信心进入测试，来检测你对当前知识点的掌握程度吗？[(Yes)进入测试/(No)继续学习]: ").strip()
+                    user_input = input(
+                        f"\n你有信心进入测试，来检测你对当前知识点的掌握程度吗？[(Yes)进入测试/(No)继续学习]: "
+                    ).strip()
                     if user_input == "Yes" or user_input == "进入测试":
                         break
                     elif user_input == "No" or user_input == "继续学习":
@@ -377,16 +391,37 @@ def main():
     mentor = AstraMentor()
 
     # 获取用户输入
-    print("\n请输入学习主题:")
-    topic = input("主题名称: ").strip()
+    print("\n📋 请告诉我你想学习什么？")
+    print()
+    topic = input("📚 学习主题: ").strip()
     if not topic:
         print("❌ 主题名称不能为空")
         sys.exit(1)
 
-    note = input("备注（可选）: ").strip()
+    print("\n🎯 学习目的（可选，例如：用于开发Web应用、准备面试等）:")
+    learning_goal = input("   ").strip()
 
-    # 第一步：生成知识图谱
-    graph_data = mentor.generate_knowledge_graph(topic=topic, user_note=note)
+    # 当前水平
+    print("\n📊 你的当前水平:")
+    for option in LearningLevel.display_current_options():
+        print(f"   {option}")
+    current_choice = input("   请选择 (1-4，默认1): ").strip() or "1"
+    current_level = LearningLevel.get_current_level(current_choice)
+
+    # 目标水平
+    print("\n🚀 你的目标水平:")
+    for option in LearningLevel.display_target_options():
+        print(f"   {option}")
+    target_choice = input("   请选择 (1-4，默认4): ").strip() or "4"
+    target_level = LearningLevel.get_target_level(target_choice)
+
+    # 第一步：生成知识星图
+    graph_data = mentor.generate_knowledge_graph(
+        topic=topic,
+        learning_goal=learning_goal,
+        current_level=current_level,
+        target_level=target_level,
+    )
     if graph_data is None:
         print("\n👋 已退出")
         sys.exit(0)
@@ -398,8 +433,10 @@ def main():
     )
     print("\n可用的知识节点：")
     for i, node in enumerate(graph_data["nodes"], 1):
-        level_icon = ["🔰", "📚", "🚀", "🌟"][min(node.get("level", 0), 3)]
-        print(f"  {i}. {level_icon} {node['name']} ({node.get('difficulty', '中级')})")
+        attrs = node.get("attributes", {})
+        weight_a = attrs.get("weight_A", 0.0)
+        weight_b = attrs.get("weight_B", 0.8)
+        print(f"  {i}. {node['name']} (当前:{weight_a:.1%} → 目标:{weight_b:.1%})")
 
     node_choice = input("\n请选择要学习的节点编号（直接回车选择第一个）: ").strip()
     if not node_choice:
@@ -412,28 +449,86 @@ def main():
             print("❌ 无效的选择，自动选择第一个节点")
             selected_node = graph_data["nodes"][0]
 
-    print(f"\n已选择: {selected_node['name']}")
-    if selected_node.get("description"):
-        print(f"描述: {selected_node['description']}")
+    # 获取节点属性
+    selected_attrs = selected_node.get("attributes", {})
+    current = selected_attrs.get("weight_A", 0.0)
+    target = selected_attrs.get("weight_B", 0.8)
 
-    # 第三步：添加个性化备注
-    print("\n你可以为这个知识点添加个性化需求（可选）：")
-    print("例如: '我想了解实际项目应用'、'重点讲解性能优化'、'需要更多代码示例'等")
+    print(f"\n已选择: {selected_node['name']}")
+    # 显示 AI 生成的知识点描述
+    if selected_attrs.get("description"):
+        print(f"📝 描述: {selected_attrs['description']}")
+
+    # 第三步：确认学习程度并添加个性化备注
+    print(f"\n{'='*60}")
+    print("📊 AI 分析的学习程度")
+    print(f"{'='*60}")
+    print(f"   当前掌握度: {current:.1%}")
+    print(f"   目标掌握度: {target:.1%}")
+
+    # 询问是否需要调整
+    print(f"\n💡 提示：这是 AI 根据你的整体水平分析的结果")
+    adjust = input("是否需要调整此节点的学习程度？[y/N]: ").strip().lower()
+
+    if adjust == "y":
+        print("\n请输入新的学习程度：")
+        try:
+            new_current = input(
+                f"  当前掌握度 (0-100，默认{int(current*100)}): "
+            ).strip()
+            if new_current:
+                current = float(new_current) / 100.0
+                current = max(0.0, min(1.0, current))  # 限制在 0-1 之间
+
+            new_target = input(f"  目标掌握度 (0-100，默认{int(target*100)}): ").strip()
+            if new_target:
+                target = float(new_target) / 100.0
+                target = max(0.0, min(1.0, target))  # 限制在 0-1 之间
+
+            print(f"\n✅ 已更新：当前 {current:.1%} → 目标 {target:.1%}")
+        except ValueError:
+            print("⚠️  输入无效，使用原有数值")
+
+    # 输入个性化备注
+    print(f"\n{'='*60}")
+    print("💬 个性化学习需求（可选）")
+    print(f"{'='*60}")
+    print("例如: '重点关注实际项目应用'、'需要更多代码示例'、'准备面试'等")
     user_note = input("备注: ").strip()
 
-    # 第四步：设置学习参数
-    try:
-        current = float(input("\n当前掌握度 (0.0-1.0，默认0.0): ").strip() or "0.0")
-        target = float(input("目标掌握度 (0.0-1.0，默认0.8): ").strip() or "0.8")
-    except ValueError:
-        print("❌ 请输入有效的数字")
-        sys.exit(1)
+    # 更新节点数据（包括可能修改的 weight_A、weight_B 和 user_note）
+    has_changes = False
+    if current != selected_attrs.get("weight_A", 0.0):
+        selected_attrs["weight_A"] = current
+        has_changes = True
+    if target != selected_attrs.get("weight_B", 0.8):
+        selected_attrs["weight_B"] = target
+        has_changes = True
+    if user_note:
+        selected_attrs["user_note"] = user_note
+        has_changes = True
 
-    # 第五步：开始学习
+    # 保存更新后的数据到文件
+    if has_changes:
+        selected_node["attributes"] = selected_attrs
+        test_data_dir = Path("test_data")
+        graph_filename = (
+            f"knowledge_graph_{topic.replace(' ', '_').replace('/', '_')}.json"
+        )
+        graph_file = test_data_dir / graph_filename
+        with open(graph_file, "w", encoding="utf-8") as f:
+            json.dump(graph_data, f, ensure_ascii=False, indent=2)
+        print(f"✅ 已保存更新到知识星图")
+
+    # 第四步：开始学习
+    print(f"\n📊 学习参数（基于 AI 分析）：")
+    print(f"   当前掌握度: {current:.1%}")
+    print(f"   目标掌握度: {target:.1%}")
+
     mentor.start_learning(
         node_name=selected_node["name"],
-        node_description=selected_node.get("description", ""),
-        user_note=user_note,
+        node_description=selected_attrs.get("description", ""),  # AI 生成的描述
+        user_note=selected_attrs.get("user_note", ""),  # 用户的备注
         target_mastery=target,
         current_mastery=current,
     )
