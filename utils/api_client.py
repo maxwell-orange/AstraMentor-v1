@@ -30,6 +30,7 @@ class APIClient:
         self.client = genai.Client(api_key=api_key, 
         http_options=types.HttpOptions(
         base_url=config.api.api_endpoint,   # ✅ 你的 endpoint 放这里
+        timeout=120000,                     # ✅ 设置120秒超时，复杂任务需要更长时间
         # api_version="v1",                 # 可选：稳定版 v1（不写默认可能走 beta）
     ))
 

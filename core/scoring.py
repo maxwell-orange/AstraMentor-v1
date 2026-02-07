@@ -272,7 +272,12 @@ class ScoringEngine:
             )
             
             # 4. 计算目标掌握度
-            target = task_score * w_cap
+            # 修复：如果用户当前的掌握度已经超过了任务难度上限，且本次答题表现良好（>=0.8）
+            # 则进入"维护模式"，目标是不让掌握度因为做简单题而下降
+            if old_mastery > w_cap and task_score >= 0.8:
+                target = max(task_score * w_cap, old_mastery)
+            else:
+                target = task_score * w_cap
             
             # 5. 计算基础变化量
             delta = target - decayed_mastery
